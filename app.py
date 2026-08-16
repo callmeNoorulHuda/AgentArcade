@@ -28,14 +28,19 @@ st.set_page_config(
 
 # Check API Keys safely without stopping before rendering
 if not os.environ.get("GROQ_API_KEY"):
+    try:
+        os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+    except Exception:
+        pass
+
+if not os.environ.get("GROQ_API_KEY"):
     st.error(
-        "⚠️ **GROQ_API_KEY not found.**\n\n"
-        "Create a `.env` file in the same folder as this script containing:\n\n"
-        "```\nGROQ_API_KEY=your_actual_key_here\n```\n\n"
-        "Then restart the app (`streamlit run app.py`)."
+        "⚠️ GROQ_API_KEY not found. "
+        "Add it to your .env locally or Streamlit Cloud Secrets."
     )
     st.stop()
 
+    
 from langgraph.graph.message import add_messages
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langgraph.types import interrupt, Command
