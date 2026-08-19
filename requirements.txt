@@ -3,5 +3,6 @@ langgraph
 langchain
 langchain-core
 langchain-groq
+langchain_google_genai
 pygame
 python-dotenv
