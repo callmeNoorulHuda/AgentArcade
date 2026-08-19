@@ -40,6 +40,12 @@ if not os.environ.get("GROQ_API_KEY"):
     )
     st.stop()
 
+if not os.environ.get("GOOGLE_API_KEY"):
+    try:
+        os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+    except Exception:
+        pass
+
     
 from langgraph.graph.message import add_messages
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
@@ -47,12 +53,15 @@ from langgraph.types import interrupt, Command
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 if os.environ.get("LANGCHAIN_API_KEY"):
     os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
     os.environ.setdefault("LANGCHAIN_PROJECT", "dino-runner-multiagent")
 
-llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0.2)
+llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0.2,  max_tokens=5000)
+llm_fast = ChatGroq(model="openai/gpt-oss-20b", temperature=0.2)  
+llm_google = ChatGoogleGenerativeAI(model="gemini-3.5-flash-lite", temperature=0.2)
 
 # ============================================================
 # PAGE STYLING
@@ -340,7 +349,7 @@ def engineer_node(state: GameState):
         instruction = f"Write a complete Python pygame game based on this design:\n{design}"
 
     system_prompt = "You are a Python game developer using pygame. Return ONLY complete, runnable Python code."
-    response = llm.invoke([("system", system_prompt), ("human", instruction)])
+    response = llm_google.invoke([("system", system_prompt), ("human", instruction)])
     return {
         "engineer_code": [AIMessage(content=strip_code_fences(get_text(response)))],
         "current_actor": "execution_manager",
@@ -410,15 +419,30 @@ def qa_node(state: GameState):
 
     system_prompt = "You are a QA engineer. Review code & logs against design. List concrete bugs in plain English."
     instruction = f"Design:\n{design}\n\nCode:\n{code}\n\nExecution:\n{execution_log}"
-    response = llm.invoke([("system", system_prompt), ("human", instruction)])
+    response = llm_google.invoke([("system", system_prompt), ("human", instruction)])
     return {"qa_feedback": [AIMessage(content=get_text(response))], "current_actor": "scorer"}
 
 def scorer_node(state: GameState):
     qa_report = get_text(state["qa_feedback"][-1])
-    system_prompt = "Output ONLY a single integer from 1 to 10 evaluating game completeness."
-    response = llm.invoke([("system", system_prompt), ("human", qa_report)])
-    match = re.search(r"\d+", get_text(response).strip())
-    score = int(match.group()) if match else 5
+    system_prompt = (
+        "Evaluate game completeness based on the QA report. "
+        "Respond with ONLY a single digit (1-10) and absolutely nothing else — "
+        "no words, no punctuation, no explanation."
+    )
+    response = llm_google.invoke([("system", system_prompt), ("human", qa_report)])
+ 
+    raw = get_text(response).strip()
+
+    # Try strict parse first (expected case)
+    if raw.isdigit():
+        score = int(raw)
+    else:
+        # Fallback: take the LAST number in the text, not the first —
+        # models usually state the actual score at the end of any
+        # explanation, so this is safer than re.search's leftmost match.
+        matches = re.findall(r"\d+", raw)
+        score = int(matches[-1]) if matches else 5
+
     return {"iteration_score": [max(1, min(10, score))], "current_actor": "human_review"}
 
 def route_after_scoring(state: GameState):
@@ -431,9 +455,7 @@ def route_after_scoring(state: GameState):
     })
     return "end" if decision == "finish" else "engineer"
 
-# ============================================================
 # GRAPH BUILD
-# ============================================================
 
 @st.cache_resource
 def build_graph():
