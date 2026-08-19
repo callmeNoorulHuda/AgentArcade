@@ -145,19 +145,25 @@ st.markdown(
         line-height: 1.5 !important;
     }
 
-    /* ambient floating creatures in the corners */
+    /* ambient floating creatures - spread across the full height with
+       generous gaps between each (roughly 20vh apart) so nothing
+       clusters together, kept OUT of the top ~15vh (header/title zone)
+       and alternating far left/right so they read as scattered rather
+       than lined up. */
     .critter {
         position: fixed;
-        font-size: 2.6rem;
+        font-size: 2.4rem;
         opacity: 0.22;
-        z-index: 0;
+        z-index: 1;
         pointer-events: none;
         filter: drop-shadow(0 0 8px rgba(57, 255, 136, 0.35));
     }
-    .critter.c1 { top: 8%; left: 3%; animation: bob1 6s ease-in-out infinite; }
-    .critter.c2 { top: 10%; right: 4%; animation: bob2 5s ease-in-out infinite 0.6s; }
-    .critter.c3 { bottom: 8%; left: 4%; animation: bob1 7s ease-in-out infinite 0.3s; }
-    .critter.c4 { bottom: 10%; right: 5%; animation: bob2 6.5s ease-in-out infinite 1s; }
+    .critter.c1 { top: 18vh; left: 4%;  animation: bob1 6s   ease-in-out infinite; }
+    .critter.c2 { top: 30vh; right: 6%; animation: bob2 5s   ease-in-out infinite 0.6s; }
+    .critter.c3 { top: 46vh; left: 6%;  animation: bob1 7s   ease-in-out infinite 0.3s; }
+    .critter.c4 { top: 58vh; right: 4%; animation: bob2 6.5s ease-in-out infinite 1s; }
+    .critter.c5 { top: 74vh; left: 5%;  animation: bob1 5.5s ease-in-out infinite 0.9s; }
+    .critter.c6 { top: 86vh; right: 7%; animation: bob2 7.2s ease-in-out infinite 0.2s; }
     @keyframes bob1 {
         0%, 100% { transform: translateY(0) rotate(-6deg); }
         50% { transform: translateY(-16px) rotate(6deg); }
@@ -167,48 +173,23 @@ st.markdown(
         50% { transform: translateY(-14px) rotate(-6deg); }
     }
 
-    /* pac-man being chased by ghosts, running left to right across the top */
-    .chase-lane {
-        position: fixed;
-        top: 3%;
-        left: 0;
-        width: 100%;
-        height: 40px;
-        overflow: hidden;
-        z-index: 0;
-        pointer-events: none;
-        opacity: 0.5;
-    }
-    .chaser {
-        position: absolute;
-        top: 0;
-        font-size: 1.7rem;
-        animation: chase 9s linear infinite;
-    }
-    .chaser.pac { animation-delay: 0s; }
-    .chaser.ghost1 { animation-delay: 1.6s; }
-    .chaser.ghost2 { animation-delay: 3.2s; }
-    @keyframes chase {
-        0% { left: -8%; }
-        100% { left: 105%; }
-    }
-
-    /* a game console soaring across the screen on a loop */
+    /* game console soaring across the BOTTOM third of the screen now,
+       instead of cutting through the header up top. */
     .flying-console {
         position: fixed;
         left: -10%;
-        top: 18%;
+        top: 82vh;
         font-size: 2.2rem;
-        z-index: 0;
+        z-index: 1;
         pointer-events: none;
         opacity: 0.28;
         animation: fly-across 17s linear infinite;
         filter: drop-shadow(0 0 8px rgba(77, 208, 255, 0.5));
     }
     @keyframes fly-across {
-        0%   { left: -10%; top: 20%; transform: rotate(-8deg); }
-        50%  { left: 50%;  top: 5%;  transform: rotate(4deg); }
-        100% { left: 110%; top: 22%; transform: rotate(-8deg); }
+        0%   { left: -10%; top: 84vh; transform: rotate(-8deg); }
+        50%  { left: 50%;  top: 70vh; transform: rotate(4deg); }
+        100% { left: 110%; top: 86vh; transform: rotate(-8deg); }
     }
     /* launch-sequence loading animation, replaces the plain spinner */
     .launch-pad {
@@ -264,19 +245,6 @@ st.markdown(
     .dots { animation: blink 1s steps(1) infinite; }
     @keyframes blink { 50% { opacity: 0; } }
     </style>
-
-    <div class="critter c1">🦖</div>
-    <div class="critter c2">🐍</div>
-    <div class="critter c3">👾</div>
-    <div class="critter c4">🕹️</div>
-
-    <div class="chase-lane">
-        <span class="chaser pac">🟡</span>
-        <span class="chaser ghost1">👻</span>
-        <span class="chaser ghost2">👻</span>
-    </div>
-
-    <div class="flying-console">🎮</div>
     """,
     unsafe_allow_html=True,
 )
@@ -696,3 +664,30 @@ else:
             st.session_state.clear()
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
+
+# ============================================================
+# AMBIENT BACKGROUND DECORATIONS
+# ============================================================
+# Rendered LAST, as its own markdown call, on every run regardless of
+# app state. Streamlit gives each st.markdown() its own wrapper
+# container - putting this first (as it originally was, right after
+# page config) meant these position:fixed elements ended up trapped
+# inside a near-empty, early container and got visually clipped/hidden
+# behind everything rendered afterward (the title, panels, buttons).
+# Rendering it last, after all real content already exists, fixes that.
+# More creatures added, spread across the full height with generous
+# gaps between each, and everything kept below ~15vh so nothing
+# collides with the header/title zone up top.
+st.markdown(
+    """
+    <div class="critter c1">🦖</div>
+    <div class="critter c2">🐍</div>
+    <div class="critter c3">👾</div>
+    <div class="critter c4">🕹️</div>
+    <div class="critter c5">🐦</div>
+    <div class="critter c6">🍄</div>
+
+    <div class="flying-console">🎮</div>
+    """,
+    unsafe_allow_html=True,
+)
