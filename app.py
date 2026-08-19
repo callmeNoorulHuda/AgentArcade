@@ -52,7 +52,7 @@ if os.environ.get("LANGCHAIN_API_KEY"):
     os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
     os.environ.setdefault("LANGCHAIN_PROJECT", "dino-runner-multiagent")
 
-llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.2)
+llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0.2)
 
 # ============================================================
 # PAGE STYLING
@@ -381,7 +381,13 @@ def engineer_node(state: GameState):
 
 def save_code_node(state: GameState):
     latest_code = get_text(state["engineer_code"][-1])
-    with open("generated_game.py", "w") as f:
+    # FIX: no encoding was specified here, so Python fell back to the
+    # OS default - cp1252 on Windows - which can't represent every
+    # Unicode character an LLM might write (e.g. U+2011 "non-breaking
+    # hyphen" instead of a plain ASCII "-" inside a comment). That's
+    # exactly what raised UnicodeEncodeError. utf-8 can represent any
+    # character the model could plausibly generate.
+    with open("generated_game.py", "w", encoding="utf-8") as f:
         f.write(latest_code)
     return {"file_saved": True, "current_actor": "execution_manager"}
 
@@ -401,13 +407,30 @@ def execution_node(state: GameState):
     headless_env = dict(os.environ)
     headless_env["SDL_VIDEODRIVER"] = "dummy"
     headless_env["SDL_AUDIODRIVER"] = "dummy"
+    # Also force UTF-8 for the subprocess's own stdio, in case the
+    # generated code prints anything with non-ASCII characters (e.g.
+    # emoji in a print statement) - otherwise the child process would
+    # inherit the same cp1252 default and could crash on ITS OWN output.
+    headless_env["PYTHONIOENCODING"] = "utf-8"
 
     try:
-        result = subprocess.run(["python", "generated_game.py"], capture_output=True, text=True, timeout=8, env=headless_env)
+        result = subprocess.run(
+            ["python", "generated_game.py"],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            env=headless_env,
+            # FIX: subprocess.run's text=True decodes stdout/stderr using
+            # the OS default encoding (cp1252 on Windows) unless told
+            # otherwise. Same root cause as save_code_node above, just
+            # on the read side instead of the write side.
+            encoding="utf-8",
+            errors="replace",
+        )
         execution_log = f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
     except subprocess.TimeoutExpired as e:
-        out = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
-        err = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")
+        out = e.stdout.decode("utf-8", errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+        err = e.stderr.decode("utf-8", errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or "")
         execution_log = f"Process ran for 8s (expected for headless game).\nSTDOUT:\n{out}\nSTDERR:\n{err}"
 
     return {"qa_feedback": [ToolMessage(content=execution_log, tool_call_id="execution_manager")], "current_actor": "qa"}
@@ -660,7 +683,12 @@ else:
 
         final_code = ""
         if os.path.exists("generated_game.py"):
-            with open("generated_game.py", "r") as f:
+            # FIX: same missing-encoding issue on the read side - without
+            # encoding="utf-8" here, Python uses the OS default (cp1252)
+            # to decode the file, which can raise or mangle text if the
+            # file (written correctly as utf-8 above) contains characters
+            # outside cp1252's range.
+            with open("generated_game.py", "r", encoding="utf-8") as f:
                 final_code = f.read()
 
         st.download_button("💾 DOWNLOAD GAME (.PY)", data=final_code, file_name="game.py", mime="text/x-python")
